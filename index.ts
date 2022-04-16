@@ -1,75 +1,57 @@
 import dotenv from 'dotenv';
 import express , {Express, Request, Response, NextFunction} from 'express';
-import expressWs, {Application, Instance, Router} from 'express-ws';
+
+import { request, Server, IncomingMessage} from 'http';
+import {WebSocketServer} from 'ws';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import redis, {RedisClientType, createClient} from 'redis';
 
+
 dotenv.config();
 
-const wsInstance : Instance = expressWs(express())
-const app : Application = wsInstance.app;
-const router : Router  = express.Router();
-const wss = wsInstance.getWss();
+const app : Express = express();
 
-const client : RedisClientType = createClient()
-client.connect(); // connect to redis server
+const redis_client : RedisClientType = createClient();
 
-app.use(bodyParser.urlencoded({extended : true}));
-app.use(bodyParser.json())
-app.use(cors({
-    origin : ''
-}))
 
-async function generateClientId() {
-    const user: string | null = await client.get('user');
-    if (typeof user === 'string') {
-        let userArray : Array<string> = JSON.parse(user);
-        return userArray.length;
-    }
+const lobbySocket : WebSocketServer = new WebSocketServer({noServer : true}) // server for the game lobby
+const gameSocket : WebSocketServer  = new WebSocketServer({noServer : true})  // server for the game action
 
-}
-
-app.use(async (req : Request , res : Response, next: NextFunction) => { // connects to redis
-    client.on('error', err => {
-        console.log(err.message);
+lobbySocket.on('connection', async (ws, req) => {
+    ws.on('message', async (message) => {
+        console.log(message.toString(), ws)
     })
-    let games = await  client.get('games');
-    let users = await client.get('user')
-    if (!(games && users)) {  // creates the game and user redis objects if they do not yet exist
-        await client.set('user', '[]'); // sets the user space 
-        await client.set('games', "[]"); // sets the game space
-
-    } 
-
-    next();
 })
 
 
-app.get('/',  (req : Request, res : Response) => {  /// remove later
-    console.log(req.headers)
-    res.send('hello world')
-})
 
 
-wss.on('connection', function connection(ws, req) { // 
+const server : Server = app.listen(process.env.PORT, async () => {
+    console.log('node server has started')
+    await redis_client.connect();
+    const game = await redis_client.get('game');  // get the game data from redis
+    const users = await redis_client.get('users'); // get the user data from redis
 
-   // console.log(wsInstance.getWss().clients)
-   
-    ws.send('welcome')
-})
-wss.on('message', function connection(ws, req) { // 
-    console.log(ws)
-})
+    if (!(game && users)) {   // if the both of them do not exits 
+        await redis_client.set('game', '[]');
+        await redis_client.set('users', '[]')
+    }   
+    console.log('redis server connected');
+});
 
-router.ws('/home', (ws, req : Request) => {
-    
-    ws.onmessage = (e) => {
-        console.log(e)
+server.on('upgrade', (request : IncomingMessage, socket, head) => {
+    const pathname  : any = request.url;
+
+    if (pathname === '/lobby' ) {
+        lobbySocket.handleUpgrade(request, socket, head, ws => {
+            lobbySocket.emit('connection', ws, request);
+        });
+    } else if (pathname === '/game') {
+        gameSocket.handleUpgrade(request, socket, head, ws => {
+            gameSocket.emit('connection', ws, request);
+        });
+    } else {
+        socket.destroy();
     }
-})
-
-
-app.listen('3001', () => {
-    console.log('node server has started...');
 })
