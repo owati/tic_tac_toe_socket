@@ -22,24 +22,39 @@ const redis_client = (0, redis_1.createClient)();
 const lobbySocket = new ws_1.WebSocketServer({ noServer: true }); // server for the game lobby
 const gameSocket = new ws_1.WebSocketServer({ noServer: true }); // server for the game action
 lobbySocket.on('connection', (ws, req) => __awaiter(void 0, void 0, void 0, function* () {
-    const games_json = yield redis_client.get('game');
-    const user_json = yield redis_client.get('users');
-    const games = JSON.parse(String(games_json));
-    const users = JSON.parse(String(user_json));
+    let games = JSON.parse(String(yield redis_client.get('game')));
+    let users = JSON.parse(String(yield redis_client.get('users')));
     if (!ws.id) { // the client is recognised by the server
         ws.id = yield generateId();
     }
     ws.send(JSON.stringify({
+        type: "availablle games",
         games: games
     }));
     for (let client of lobbySocket.clients) { // send the new number of users to all clients
+        users = JSON.parse(String(yield redis_client.get('users'))); // refetch the user data
         client.send(JSON.stringify({
-            users: users.length
+            type: "user number",
+            users: users.length,
         }));
     }
     ws.on('message', (message) => __awaiter(void 0, void 0, void 0, function* () {
         const data = JSON.parse(message.toString());
-        console.log(data, games, users);
+        games = JSON.parse(String(yield redis_client.get('game')));
+        if (data.type === 'game create') {
+            let game_object = {
+                id: yield generateGameId(),
+                player1: null,
+                player2: null,
+                games_status: []
+            };
+            games.push(game_object);
+        }
+    }));
+    ws.on('close', () => __awaiter(void 0, void 0, void 0, function* () {
+        console.log('closing socket for client ' + ws.id);
+        users.splice(users.indexOf(ws.id), 1);
+        yield redis_client.set('users', JSON.stringify(users));
     }));
 }));
 gameSocket.on('connection', (ws, req) => __awaiter(void 0, void 0, void 0, function* () {
@@ -54,10 +69,29 @@ function generateId() {
         const users = JSON.parse(String(users_json));
         let num;
         do {
-            num = Math.random() * 10000;
+            num = Math.floor(Math.random() * 10000);
         } while (users.includes(num)); // ensures the number is not in the user array
         users.push(num); // adds the number to the array
         yield redis_client.set('users', JSON.stringify(users)); // sets the number back in the redis object
+        return num;
+    });
+}
+function generateGameId() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const games = JSON.parse(String(yield redis_client.get('game')));
+        let num;
+        do {
+            num = Math.floor(Math.random() * 10000);
+        } while ((() => {
+            let check = false;
+            for (let { id } of games) {
+                if (id == num) {
+                    check = true;
+                    break;
+                }
+            }
+            return check;
+        })());
         return num;
     });
 }
