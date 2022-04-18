@@ -13,6 +13,7 @@ interface myWebSocket extends WebSocket {
 }
 
 interface GameObject {
+    name : string,
     id : number,
     player1 : number | null,
     player2 : number | null,
@@ -38,8 +39,9 @@ lobbySocket.on('connection', async (ws : myWebSocket, req) => {
     }
 
     ws.send(JSON.stringify({ // sends the available games to the user
-        type : "availablle games",
-        games : games
+        type : "available games",
+        games : games,
+        games_num : games.length,
     }));
 
     for(let client of lobbySocket.clients) { // send the new number of users to all clients
@@ -55,16 +57,28 @@ lobbySocket.on('connection', async (ws : myWebSocket, req) => {
         const data = JSON.parse(message.toString());
         games = JSON.parse(String( await redis_client.get('game')));
 
+        
         if(data.type === 'game create') {
-            let game_object : GameObject = {
+            console.log('creating a new game.................')
+            let game_object : GameObject = { // creates a new game object
+                name : data.name,
                 id : await generateGameId(),
                 player1 : null, 
                 player2 : null,
-                games_status : []
+                games_status : ['','','','','','','','','']   
             }
 
             games.push(game_object);
-            
+
+            await redis_client.set('game', JSON.stringify(games));
+
+            for (let client of lobbySocket.clients) {
+                client.send(JSON.stringify({
+                    type : "available games",
+                    games : games,
+                    games_num : games.length
+                }))
+            }
         }
         
     })

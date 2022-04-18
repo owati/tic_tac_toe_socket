@@ -28,8 +28,9 @@ lobbySocket.on('connection', (ws, req) => __awaiter(void 0, void 0, void 0, func
         ws.id = yield generateId();
     }
     ws.send(JSON.stringify({
-        type: "availablle games",
-        games: games
+        type: "available games",
+        games: games,
+        games_num: games.length,
     }));
     for (let client of lobbySocket.clients) { // send the new number of users to all clients
         users = JSON.parse(String(yield redis_client.get('users'))); // refetch the user data
@@ -42,13 +43,23 @@ lobbySocket.on('connection', (ws, req) => __awaiter(void 0, void 0, void 0, func
         const data = JSON.parse(message.toString());
         games = JSON.parse(String(yield redis_client.get('game')));
         if (data.type === 'game create') {
+            console.log('creating a new game.................');
             let game_object = {
+                name: data.name,
                 id: yield generateGameId(),
                 player1: null,
                 player2: null,
-                games_status: []
+                games_status: ['', '', '', '', '', '', '', '', '']
             };
             games.push(game_object);
+            yield redis_client.set('game', JSON.stringify(games));
+            for (let client of lobbySocket.clients) {
+                client.send(JSON.stringify({
+                    type: "available games",
+                    games: games,
+                    games_num: games.length
+                }));
+            }
         }
     }));
     ws.on('close', () => __awaiter(void 0, void 0, void 0, function* () {
