@@ -38,22 +38,8 @@ lobbySocket.on('connection', async (ws : myWebSocket, req) => {
         ws.id =  await generateId()
     }
 
-    ws.send(JSON.stringify({ // sends the available games to the user
-        type : "available games",
-        games : games,
-        games_num : games.length,
-    }));
-
-    for(let client of lobbySocket.clients) { // send the new number of users to all clients
-        users = JSON.parse(String(await redis_client.get('users'))) // refetch the user data
-
-        client.send(JSON.stringify({
-            type : "user number",
-            users : users.length,
-        }));
-    }
-
     ws.on('message', async (message) => {
+        console.log(message.toString());
         const data = JSON.parse(message.toString());
         games = JSON.parse(String( await redis_client.get('game')));
 
@@ -72,13 +58,10 @@ lobbySocket.on('connection', async (ws : myWebSocket, req) => {
 
             await redis_client.set('game', JSON.stringify(games));
 
-            for (let client of lobbySocket.clients) {
-                client.send(JSON.stringify({
-                    type : "available games",
-                    games : games,
-                    games_num : games.length
-                }))
-            }
+            ws.send(JSON.stringify({
+                type : "new game",
+                id : game_object.id
+            }))
         }
         
     })
