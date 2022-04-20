@@ -30,18 +30,12 @@ const redis_client : RedisClientType = createClient();
 const lobbySocket : WebSocketServer = new WebSocketServer({noServer : true}) // server for the game lobby
 const gameSocket : WebSocketServer  = new WebSocketServer({noServer : true})  // server for the game action
 
-lobbySocket.on('connection', async (ws : myWebSocket, req) => {
-    let games  =JSON.parse(String( await redis_client.get('game')));
-    let users = JSON.parse(String(await redis_client.get('users')));
+lobbySocket.on('connection', async (ws, req) => {
 
-    if(!ws.id) { // the client is recognised by the server
-        ws.id =  await generateId()
-    }
-
-    ws.on('message', async (message) => {
+    ws.on('message', async (message) => { // handle the creation of new games
         console.log(message.toString());
         const data = JSON.parse(message.toString());
-        games = JSON.parse(String( await redis_client.get('game')));
+        const games = JSON.parse(String( await redis_client.get('game')));
 
         
         if(data.type === 'game create') {
@@ -67,16 +61,33 @@ lobbySocket.on('connection', async (ws : myWebSocket, req) => {
     })
 
     ws.on('close', async () => {  // the user id from the user array...
-        console.log('closing socket for client ' + ws.id);
-        users.splice(users.indexOf(ws.id),1);
-        await redis_client.set('users', JSON.stringify(users));
+        console.log('closing socket for a client in the lobby');
     })
 })
 
-gameSocket.on('connection', async (ws, req) =>  {
+gameSocket.on('connection', async (ws : myWebSocket, req) =>  {
+    console.log(req.url)
+    const game_id = req.url?.split('/')[2]
+    const games = JSON.parse(String(await redis_client.get('games')))
+
+    if ((() : boolean => { // checks of the if is a valid id
+        let exists : boolean = false
+        for (const {id} of games) {
+            if(id == games_id) {
+                exists = true;
+                break;
+            }
+        }
+        return exists
+    })()) {
+        if (!ws.id) {
+            ws.id = await generateId() // give id to the player
+        }
+    }
     ws.on('message', async (message) => {
         const data = JSON.parse(message.toString());
         console.log(data);
+
     } )
 })
 
@@ -137,7 +148,7 @@ server.on('upgrade', (request : IncomingMessage, socket, head) => {
         lobbySocket.handleUpgrade(request, socket, head, ws => {
             lobbySocket.emit('connection', ws, request);
         });
-    } else if (pathname === '/game') {
+    } else if (pathname.includes('/game')) {
         gameSocket.handleUpgrade(request, socket, head, ws => {
             gameSocket.emit('connection', ws, request);
         });
