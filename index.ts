@@ -101,7 +101,7 @@ lobbySocket.on('connection', async (ws, req) => {
 
     })
 
-    ws.on('close', async () => {  // the user id from the user array...
+    ws.on('close', async () => { 
         console.log('closing socket for a client in the lobby');
     })
 })
@@ -135,6 +135,15 @@ gameSocket.on('connection', async (ws: myWebSocket, req) => {
                     type : "game entrance",
                     game : game.getGame()
                 }))
+
+                if(game.getPlayers()[1]) {
+                    sendMessage(gameSocket, game, {
+                        type : "game entrance",
+                        message : "game player complete",
+                        game : game.getGame(),
+                        isTurn : ws.id == game.getPlayers()[0]
+                    })
+                }
             }
         } else {
             ws.send(JSON.stringify({
@@ -145,11 +154,40 @@ gameSocket.on('connection', async (ws: myWebSocket, req) => {
     }
     ws.on('message', async (message) => {
         const data = JSON.parse(message.toString());
-        console.log(data);
+
+        if (data.type === "game update") {
+            sendMessage(gameSocket, game, {
+                type  : "game updated",
+                status : data.status,
+                isTurn : ws.id !== game.getPlayers()[countEmpty(data.status) % 2]
+            })
+        }
 
     })
 })
 
+function sendMessage(socket : WebSocketServer, game : Game, message : object) { // de
+    for(const player of socket.clients) {
+        const player_mod = player as myWebSocket
+        if(game.getPlayers().includes(Number(player_mod.id))) {
+            player_mod.send(
+                JSON.stringify(message)
+            )
+        }
+    }
+}
+
+
+function countEmpty(list : Array<string>) : number {
+    let num : number = 0;
+    list.forEach(x => {
+        if(x === '') {
+            num++;
+        }
+    })
+
+    return num;
+}
 
 async function generateId(): Promise<number> {
     const users_json = await redis_client.get('users');

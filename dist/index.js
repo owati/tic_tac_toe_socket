@@ -112,6 +112,14 @@ gameSocket.on('connection', (ws, req) => __awaiter(void 0, void 0, void 0, funct
                     type: "game entrance",
                     game: game.getGame()
                 }));
+                if (game.getPlayers()[1]) {
+                    sendMessage(gameSocket, game, {
+                        type: "game entrance",
+                        message: "game player complete",
+                        game: game.getGame(),
+                        isTurn: ws.id == game.getPlayers()[0]
+                    });
+                }
             }
         }
         else {
@@ -123,9 +131,32 @@ gameSocket.on('connection', (ws, req) => __awaiter(void 0, void 0, void 0, funct
     }
     ws.on('message', (message) => __awaiter(void 0, void 0, void 0, function* () {
         const data = JSON.parse(message.toString());
-        console.log(data);
+        if (data.type === "game update") {
+            sendMessage(gameSocket, game, {
+                type: "game updated",
+                status: data.status,
+                isTurn: ws.id !== game.getPlayers()[countEmpty(data.status) % 2]
+            });
+        }
     }));
 }));
+function sendMessage(socket, game, message) {
+    for (const player of socket.clients) {
+        const player_mod = player;
+        if (game.getPlayers().includes(Number(player_mod.id))) {
+            player_mod.send(JSON.stringify(message));
+        }
+    }
+}
+function countEmpty(list) {
+    let num = 0;
+    list.forEach(x => {
+        if (x === '') {
+            num++;
+        }
+    });
+    return num;
+}
 function generateId() {
     return __awaiter(this, void 0, void 0, function* () {
         const users_json = yield redis_client.get('users');
